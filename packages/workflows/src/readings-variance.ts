@@ -233,3 +233,206 @@ export async function measureVersionVariance(
 
   return { rows, markdown: lines.join('\n') };
 }
+
+/** One stored reading of an evaluator: its raw findings and scores, as the model answered. */
+export interface RawReading {
+  readonly issues: readonly {
+    readonly kind: string;
+    readonly severity: string;
+    readonly quote?: string | undefined;
+  }[];
+  readonly score?: number | undefined;
+  readonly rubric: Readonly<Record<string, number>>;
+}
+
+export interface TripleVariance {
+  readonly readings: number;
+  readonly distinct: number;
+  /** Distinct findings by how many readings raised them. */
+  readonly seenIn: Readonly<Record<number, number>>;
+  /** Blocking or major in exactly one reading (what a 2-of-3 quorum drops) and in two or more (what stands). */
+  readonly heavySingle: number;
+  readonly heavyQuorum: number;
+  readonly scoreSpread: number | undefined;
+  readonly rubricSpread: Readonly<Record<string, number>>;
+}
+
+const squash = (s: string | undefined): string => (s ?? '').replace(/\s+/gu, '');
+
+/** Two raw findings are one when their kinds agree and their quotes overlap (or neither quotes). */
+export function sameRawFinding(
+  a: RawReading['issues'][number],
+  b: RawReading['issues'][number],
+): boolean {
+  if (a.kind !== b.kind) return false;
+  const qa = squash(a.quote);
+  const qb = squash(b.quote);
+  if (!qa || !qb) return !qa && !qb;
+  return qa.includes(qb) || qb.includes(qa);
+}
+
+const heavy = (severity: string): boolean => severity === 'blocking' || severity === 'major';
+
+/** Variance of K stored readings of one evaluator on one unchanged text (run 6, STEP 1.2; ADR-0118). */
+export function tripleVariance(readings: readonly RawReading[]): TripleVariance {
+  const clusters: { reading: number; issue: RawReading['issues'][number] }[][] = [];
+  readings.forEach((r, reading) => {
+    for (const issue of r.issues) {
+      const home = clusters.find(
+        (c) =>
+          !c.some((m) => m.reading === reading) && c.some((m) => sameRawFinding(m.issue, issue)),
+      );
+      if (home) home.push({ reading, issue });
+      else clusters.push([{ reading, issue }]);
+    }
+  });
+  const seenIn: Record<number, number> = {};
+  let heavySingle = 0;
+  let heavyQuorum = 0;
+  for (const c of clusters) {
+    seenIn[c.length] = (seenIn[c.length] ?? 0) + 1;
+    const heavyReadings = c.filter((m) => heavy(m.issue.severity)).length;
+    if (heavyReadings === 1 && c.length === 1) heavySingle += 1;
+    if (heavyReadings >= 2) heavyQuorum += 1;
+  }
+  const scores = readings.map((r) => r.score).filter((s): s is number => typeof s === 'number');
+  const keys = new Set(readings.flatMap((r) => Object.keys(r.rubric)));
+  const rubricSpread: Record<string, number> = {};
+  for (const k of keys) {
+    const vals = readings.map((r) => r.rubric[k]).filter((v): v is number => typeof v === 'number');
+    if (vals.length) rubricSpread[k] = Math.max(...vals) - Math.min(...vals);
+  }
+  return {
+    readings: readings.length,
+    distinct: clusters.length,
+    seenIn,
+    heavySingle,
+    heavyQuorum,
+    scoreSpread: scores.length ? Math.max(...scores) - Math.min(...scores) : undefined,
+    rubricSpread,
+  };
+}
+
+/** The base activity of a consensus reading (`structure_judge:2:r1:full:c3` → `structure_judge:2:r1:full`). */
+export function readingBase(activityId: string): string {
+  return activityId.replace(/:c[23]$/u, '');
+}
+
+function rawReadingOf(payload: unknown): RawReading | undefined {
+  const json = (payload as { json?: unknown } | null)?.json;
+  if (!json || typeof json !== 'object') return undefined;
+  const o = json as { issues?: unknown; judge_score?: unknown; dimension_scores?: unknown };
+  const issues = (Array.isArray(o.issues) ? o.issues : []).flatMap((i: unknown) => {
+    const r = i as { kind?: unknown; severity?: unknown; quote?: unknown };
+    return typeof r.kind === 'string'
+      ? [
+          {
+            kind: r.kind,
+            severity: typeof r.severity === 'string' ? r.severity : 'minor',
+            quote: typeof r.quote === 'string' ? r.quote : undefined,
+          },
+        ]
+      : [];
+  });
+  const rubric: Record<string, number> = {};
+  if (o.dimension_scores && typeof o.dimension_scores === 'object')
+    for (const [k, v] of Object.entries(o.dimension_scores as Record<string, unknown>))
+      if (typeof v === 'number') rubric[k] = v;
+  return { issues, score: typeof o.judge_score === 'number' ? o.judge_score : undefined, rubric };
+}
+
+export interface EvaluatorVarianceRow {
+  readonly evaluator: string;
+  readonly triples: number;
+  readonly findingsPerReading: number;
+  readonly distinct: number;
+  readonly seenInOne: number;
+  readonly heavySingle: number;
+  readonly heavyQuorum: number;
+  readonly scoreSpreadMedian: number | undefined;
+  readonly scoreSpreadMax: number | undefined;
+  readonly rubricSpreadMax: Readonly<Record<string, number>>;
+}
+
+/**
+ * Run 6, STEP 1.2: the readings a consensus policy (ADR-0115) stored — three per evaluator per evaluation, on unchanged
+ * text — grouped by evaluation and measured per evaluator. Only complete triples count; nothing is sampled or padded.
+ */
+export async function measureStoredTriples(
+  pool: Pool,
+  projectIds: readonly string[],
+): Promise<{ rows: EvaluatorVarianceRow[]; markdown: string }> {
+  const { rows } = await pool.query<{ project_id: string; activity_id: string; payload: unknown }>(
+    `SELECT c.project_id, c.activity_id, a.payload
+       FROM llm_calls c JOIN workflow_artifacts a ON a.id = (c.artifact_ref->>'artifact_id')::uuid
+      WHERE c.project_id = ANY($1::uuid[]) AND c.status = 'succeeded' AND c.activity_id ~ ':r[0-9]+'
+      ORDER BY c.created_at`,
+    [projectIds],
+  );
+  const groups = new Map<string, { evaluator: string; readings: Map<string, RawReading> }>();
+  for (const r of rows) {
+    const base = readingBase(r.activity_id);
+    const reading = rawReadingOf(r.payload);
+    if (!reading) continue;
+    const key = `${r.project_id}|${base}`;
+    const g = groups.get(key) ?? {
+      evaluator: base.split(':')[0] ?? base,
+      readings: new Map<string, RawReading>(),
+    };
+    g.readings.set(r.activity_id, reading);
+    groups.set(key, g);
+  }
+  const byEvaluator = new Map<string, TripleVariance[]>();
+  for (const g of groups.values()) {
+    if (g.readings.size !== 3) continue;
+    const list = byEvaluator.get(g.evaluator) ?? [];
+    list.push(tripleVariance([...g.readings.values()]));
+    byEvaluator.set(g.evaluator, list);
+  }
+  const median = (xs: number[]): number | undefined => {
+    const s = [...xs].sort((a, b) => a - b);
+    return s.length ? s[Math.floor((s.length - 1) / 2)] : undefined;
+  };
+  const out: EvaluatorVarianceRow[] = [...byEvaluator.entries()]
+    .sort(([a], [b]) => (a < b ? -1 : 1))
+    .map(([evaluator, ts]) => {
+      const spreads = ts.map((t) => t.scoreSpread).filter((s): s is number => s !== undefined);
+      const rubricSpreadMax: Record<string, number> = {};
+      for (const t of ts)
+        for (const [k, v] of Object.entries(t.rubricSpread))
+          rubricSpreadMax[k] = Math.max(rubricSpreadMax[k] ?? 0, v);
+      return {
+        evaluator,
+        triples: ts.length,
+        findingsPerReading:
+          Math.round(
+            (ts.reduce(
+              (n, t) => n + Object.entries(t.seenIn).reduce((m, [k, c]) => m + Number(k) * c, 0),
+              0,
+            ) /
+              (ts.length * 3)) *
+              10,
+          ) / 10,
+        distinct: ts.reduce((n, t) => n + t.distinct, 0),
+        seenInOne: ts.reduce((n, t) => n + (t.seenIn[1] ?? 0), 0),
+        heavySingle: ts.reduce((n, t) => n + t.heavySingle, 0),
+        heavyQuorum: ts.reduce((n, t) => n + t.heavyQuorum, 0),
+        scoreSpreadMedian: median(spreads),
+        scoreSpreadMax: spreads.length ? Math.max(...spreads) : undefined,
+        rubricSpreadMax,
+      };
+    });
+  const lines = [
+    '| Evaluator | Triples | Findings per reading | Distinct findings | Seen in one reading of three | Heavy in one reading only | Heavy in two or more | Judge-score spread (median / max) | Largest rubric spread |',
+    '| --- | --- | --- | --- | --- | --- | --- | --- | --- |',
+    ...out.map(
+      (r) =>
+        `| ${r.evaluator} | ${String(r.triples)} | ${String(r.findingsPerReading)} | ${String(r.distinct)} | ${String(r.seenInOne)} (${r.distinct ? ((r.seenInOne / r.distinct) * 100).toFixed(1) : '0'} %) | ${String(r.heavySingle)} | ${String(r.heavyQuorum)} | ${r.scoreSpreadMedian ?? '—'} / ${r.scoreSpreadMax ?? '—'} | ${
+          Object.entries(r.rubricSpreadMax)
+            .map(([k, v]) => `${k} ${String(v)}`)
+            .join(', ') || '—'
+        } |`,
+    ),
+  ];
+  return { rows: out, markdown: lines.join('\n') };
+}

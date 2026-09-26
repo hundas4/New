@@ -88,6 +88,7 @@ import {
   buildRunReport,
   fixRates,
   findingTrace,
+  measureStoredTriples,
   measureVersionVariance,
   callRows,
   inspectPack,
@@ -500,6 +501,11 @@ export async function runDb(argv: readonly string[]): Promise<AsyncCommandResult
         // Reading variance over the scorecards stored for each version (ADR-0118: no synthesized readings).
         const versionIds = rest.filter((a) => !a.startsWith('--'));
         if (versionIds.length === 0) return { ok: false, output: USAGE };
+        // Run 6, STEP 1.2: `--triples` reads the ids as projects and measures the consensus readings they stored.
+        if (rest.includes('--triples')) {
+          const triples = await measureStoredTriples(pool, versionIds);
+          return { ok: true, output: rest.includes('--json') ? triples.rows : triples.markdown };
+        }
         const report = await measureVersionVariance(pool, versionIds);
         return { ok: true, output: rest.includes('--json') ? report.rows : report.markdown };
       }
