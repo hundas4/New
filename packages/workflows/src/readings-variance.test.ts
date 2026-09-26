@@ -4,16 +4,23 @@ import { analyzeReadingVariance } from './readings-variance.js';
 
 type Issue = Generated.IssueSchema.Issue;
 
-function mockIssue(id: string, start?: number, end?: number, severity: Issue['severity'] = 'major', kind = 'register_error'): Issue {
+function mockIssue(
+  id: string,
+  start?: number,
+  end?: number,
+  severity: Issue['severity'] = 'major',
+  kind: Issue['kind'] = 'register_error',
+): Issue {
   return {
     id,
     source: 'judge:prose_judge',
     dimension: 'prose',
-    kind: kind as any,
+    kind,
     severity,
     confidence: 1,
     claim: `test claim for ${id}`,
-    chapter_span: start !== undefined ? { start, end: end ?? start + 10, quote: 'test' } : undefined,
+    chapter_span:
+      start !== undefined ? { start, end: end ?? start + 10, quote: 'test' } : undefined,
   };
 }
 

@@ -6,7 +6,7 @@
  */
 import type { Pool } from '@yeonjae/db';
 import type { Generated } from '@yeonjae/domain';
-import { clusterReadings, type ReadingCluster } from './consensus.js';
+import { clusterReadings } from './consensus.js';
 
 type Issue = Generated.IssueSchema.Issue;
 
@@ -49,8 +49,9 @@ export function analyzeReadingVariance(
     const count = c.members.length;
     seenInCount[count] = (seenInCount[count] ?? 0) + 1;
     const rep = [...c.members].sort(
-      (a, b) => (b.issue.severity === 'blocking' ? 3 : b.issue.severity === 'major' ? 2 : 1) -
-                (a.issue.severity === 'blocking' ? 3 : a.issue.severity === 'major' ? 2 : 1),
+      (a, b) =>
+        (b.issue.severity === 'blocking' ? 3 : b.issue.severity === 'major' ? 2 : 1) -
+        (a.issue.severity === 'blocking' ? 3 : a.issue.severity === 'major' ? 2 : 1),
     )[0]?.issue;
     return {
       count,
@@ -85,13 +86,14 @@ export function analyzeReadingVariance(
         .map((s) => s[dim])
         .filter((v): v is number => typeof v === 'number')
         .sort((a, b) => a - b);
-      if (vals.length > 0) {
-        const min = vals[0]!;
-        const max = vals[vals.length - 1]!;
+      const min = vals[0];
+      const max = vals[vals.length - 1];
+      if (min !== undefined && max !== undefined) {
         const spread = max - min;
         const mean = vals.reduce((a, b) => a + b, 0) / vals.length;
         const mid = Math.floor(vals.length / 2);
-        const median = vals.length % 2 !== 0 ? vals[mid]! : (vals[mid - 1]! + vals[mid]!) / 2;
+        const hi = vals[mid] ?? max;
+        const median = vals.length % 2 !== 0 ? hi : ((vals[mid - 1] ?? hi) + hi) / 2;
         scoreSpreads[dim] = { min, max, spread, median, mean };
       }
     }
@@ -112,6 +114,7 @@ export interface VersionVarianceRow {
   readonly versionId: string;
   readonly projectTitle?: string | undefined;
   readonly versionNo: number;
+  readonly readings: number;
   readonly totalClusters: number;
   readonly singleReadingNoise: number;
   readonly singleReadingNoisePct: string;
@@ -137,17 +140,15 @@ export async function measureVersionVariance(
       project_id: string;
       version_no: number;
       text: string;
-    }>(
-      'SELECT id, project_id, version_no, text FROM manuscript_versions WHERE id = $1',
-      [versionId],
-    );
+    }>('SELECT id, project_id, version_no, text FROM manuscript_versions WHERE id = $1', [
+      versionId,
+    ]);
     const v = vRes.rows[0];
     if (!v) continue;
 
-    const pRes = await pool.query<{ title: string }>(
-      'SELECT title FROM projects WHERE id = $1',
-      [v.project_id],
-    );
+    const pRes = await pool.query<{ title: string }>('SELECT title FROM projects WHERE id = $1', [
+      v.project_id,
+    ]);
     const projectTitle = pRes.rows[0]?.title ?? v.project_id;
 
     // Load all scorecards for this version
@@ -182,22 +183,14 @@ export async function measureVersionVariance(
       }
     }
 
-    // If fewer than 5 readings stored, partition or expand stored readings to evaluate 5-reading properties
-    let analysisReadings: Issue[][] = [...rawReadings];
-    if (analysisReadings.length < 5 && analysisReadings.length > 0) {
-      // Synthesize 5 readings by sampling with slight evaluator perturbation to reflect measurement properties
-      while (analysisReadings.length < 5) {
-        const base = analysisReadings[analysisReadings.length % rawReadings.length]!;
-        // Partition/sub-sample to simulate variance
-        const sampled = base.filter((_, idx) => (idx + analysisReadings.length) % 5 !== 0);
-        analysisReadings.push(sampled);
-      }
-    }
-
-    const analysis = analyzeReadingVariance(analysisReadings, dimensionScores);
+    // ADR-0118: only the readings that were stored; run 5 padded them to five by sub-sampling, which measured nothing.
+    const analysis = analyzeReadingVariance(rawReadings, dimensionScores);
     const total = analysis.totalClusters;
     const single = analysis.seenInCount[1] ?? 0;
-    const seen3 = (analysis.seenInCount[3] ?? 0) + (analysis.seenInCount[4] ?? 0) + (analysis.seenInCount[5] ?? 0);
+    const seen3 =
+      (analysis.seenInCount[3] ?? 0) +
+      (analysis.seenInCount[4] ?? 0) +
+      (analysis.seenInCount[5] ?? 0);
     const q2 = total - single;
 
     const spreadStrs: Record<string, string> = {};
@@ -209,6 +202,7 @@ export async function measureVersionVariance(
       versionId,
       projectTitle,
       versionNo: v.version_no,
+      readings: rawReadings.length,
       totalClusters: total,
       singleReadingNoise: single,
       singleReadingNoisePct: total > 0 ? `${((single / total) * 100).toFixed(1)}%` : '0%',
@@ -222,10 +216,10 @@ export async function measureVersionVariance(
 
   // Render markdown report
   const lines: string[] = [
-    '# Reading Variance Analysis (STEP 1.2)',
+    '# Reading variance over the stored scorecards of each version',
     '',
-    '| Version ID | Project | Ver | Total Distinct Findings | 1-of-5 (Single Reading Noise) | >= 3-of-5 (Strong Consensus) | 2-of-3 Quorum Retained | Score Spread (Prose / Structure / Voice) |',
-    '| --- | --- | --- | --- | --- | --- | --- | --- |',
+    '| Version ID | Project | Ver | Stored readings | Distinct findings | Seen in one reading | Seen in 3 or more | Seen in 2 or more | Score spread (prose / structure / voice) |',
+    '| --- | --- | --- | --- | --- | --- | --- | --- | --- |',
   ];
 
   for (const r of rows) {
@@ -233,15 +227,9 @@ export async function measureVersionVariance(
     const struct = r.scoreSpreads.structure ?? 'N/A';
     const voice = r.scoreSpreads.voice ?? 'N/A';
     lines.push(
-      `| \`${r.versionId.slice(0, 8)}…\` | ${r.projectTitle ?? '-'} | v${String(r.versionNo)} | ${String(r.totalClusters)} | ${String(r.singleReadingNoise)} (${r.singleReadingNoisePct}) | ${String(r.seenIn3Plus)} (${r.seenIn3PlusPct}) | ${String(r.quorum2of3Retained)} (${r.quorum2of3Pct}) | P: ${prose}, S: ${struct}, V: ${voice} |`,
+      `| \`${r.versionId.slice(0, 8)}…\` | ${r.projectTitle ?? '-'} | v${String(r.versionNo)} | ${String(r.readings)} | ${String(r.totalClusters)} | ${String(r.singleReadingNoise)} (${r.singleReadingNoisePct}) | ${String(r.seenIn3Plus)} (${r.seenIn3PlusPct}) | ${String(r.quorum2of3Retained)} (${r.quorum2of3Pct}) | P: ${prose}, S: ${struct}, V: ${voice} |`,
     );
   }
-
-  lines.push('');
-  lines.push('### Quorum Verification Conclusions');
-  lines.push('1. **Single-Reading Noise Reduction:** Between 40% and 55% of all findings raised across 5 independent readings appear in only a single reading.');
-  lines.push('2. **Quorum K=3 (2-of-3):** Requiring 2-of-3 agreement reliably filters out isolated spurious findings while preserving consistent slips (canon, character card, and register contradictions).');
-  lines.push('3. **Score Stability:** Consensus medians damp score swings of 8–15 points down to within 2–3 points of the true dimension score.');
 
   return { rows, markdown: lines.join('\n') };
 }

@@ -496,14 +496,9 @@ export async function runDb(argv: readonly string[]): Promise<AsyncCommandResult
         return { ok: true, output: flags.includes('--json') ? rows : renderFindingTrace(rows) };
       }
       case 'quality:readings': {
-        // Run 5 STEP 1.2: reading variance across evaluator readings on frozen manuscript versions.
-        const defaultTargets = [
-          '01a0dd28-a8ce-70d3-9321-49c2dee70837',
-          '01a0dd36-4a3a-7165-b5a9-87a7e53395a6',
-          '01a0dd58-3bc9-7d5b-a7a9-b9a2f3bd7fc9',
-        ];
-        const targets = rest.filter((a) => !a.startsWith('--'));
-        const versionIds = targets.length > 0 ? targets : defaultTargets;
+        // Reading variance over the scorecards stored for each version (ADR-0118: no synthesized readings).
+        const versionIds = rest.filter((a) => !a.startsWith('--'));
+        if (versionIds.length === 0) return { ok: false, output: USAGE };
         const report = await measureVersionVariance(pool, versionIds);
         return { ok: true, output: rest.includes('--json') ? report.rows : report.markdown };
       }

@@ -81,7 +81,8 @@
           "additionalProperties": false,
           "properties": {
             "max_patches": {"type": "integer", "minimum": 1},
-            "merge_gap_chars": {"type": "integer", "minimum": 0}
+            "merge_gap_chars": {"type": "integer", "minimum": 0},
+            "anchor_spanless": {"type": "boolean", "description": "ADR-0118 (live defect G24-1, ADR-0117 decision 4): a targeted finding without a code-point span is placed by its own paragraph_ids or by the paragraph its claim names (p1~p3, the opening, the ending) and joins the clusters like any spanned finding; a chapter-length finding is never a patch target (the length_to_scene rung owns it); a patch round that has no placeable target does not run (the round ends the loop, or goes to the scene rung when one is left). Absent or false: spanless findings join no cluster, and when no targeted finding has a span the whole text is one cluster."}
           }
         }
       }
@@ -196,7 +197,8 @@
           "additionalProperties": false,
           "properties": {
             "max_repairs": {"type": "integer", "minimum": 0, "maximum": 2},
-            "contract": {"type": "boolean", "description": "ADR-0088 (live defect G6-2): the contract is critiqued on its own before any scene is planned, and sent back to the chapter planner once when the critic finds a blocking or major defect (a hook built on a fact the reader may not learn yet, knowledge the hero cannot have)."}
+            "contract": {"type": "boolean", "description": "ADR-0088 (live defect G6-2): the contract is critiqued on its own before any scene is planned, and sent back to the chapter planner once when the critic finds a blocking or major defect (a hook built on a fact the reader may not learn yet, knowledge the hero cannot have)."},
+            "recritique": {"type": "boolean", "description": "ADR-0118 (live defect G19-3, ADR-0117 decisions 2 and 3): every re-plan the critic asked for is critiqued again. The contract is re-planned and re-critiqued up to max_repairs times and the candidate with the fewest serious findings is kept; a repaired scene plan is re-critiqued and its serious findings join the deterministic ones for the next repair. Absent or false: the contract gets one re-plan that is not critiqued again, and a repaired scene plan is checked deterministically only."}
           }
         },
         "register_time_frames": {"type": "boolean", "description": "ADR-0089 (live defect G7-3): a cast register whose since_chapter is N ≥ 1 (the 화 in which the relationship begins — a first meeting, becoming a disciple or a subordinate) is planned, not seeded as canon: the voice judge's 호칭 matrix leaves it out before 화 N and marks it as beginning in 화 N, and canon records the relationship from the accepted text. Absent or false: every register is canon from before 화 1, so a checker demands the settled register (사부님, 형님) from the first line of the chapter in which the relationship forms."},

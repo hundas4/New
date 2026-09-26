@@ -989,6 +989,11 @@ Conclusions: (1) single-reading noise is 5–20% of all findings, (2) K=3 (2-of-
 of findings and reliably filters isolated spurious ones, (3) consensus medians damp score swings of 8–15
 points down to 2–3 points.
 
+**Withdrawn (run 6, ADR-0118).** The rows above are not five readings. The tool read the scorecards stored for each version
+and, when there were fewer than five, padded them to five by dropping every fifth finding of a stored one in rotation; the
+noise shares measure that padding. Conclusion (3) was fixed text in the tool's report, not a computation. The stored
+spreads are real but come from the few scorecards each version has. The live measurement is §20.2.
+
 ### 19.3 What `standard@34` and `standard@35` change
 
 `standard@34` (ADR-0115): every evaluator reads three times and a reviewer-class finding stands on two; hard kinds keep
@@ -1027,3 +1032,25 @@ PLAN-REVEAL-01 reads knowledge changes only, never `must_happen`. The smallest f
 the exemption to prior-life and source-work layers and treats a beat that shows a later-dated secret, or contradicts what
 the bible records the character doing, as major; and a bounded re-plan → re-critique loop (up to `max_repairs`) that keeps
 the contract with the fewest serious findings.
+
+## 20. Run 6 — the run-5 audit and chapters 1–5 on `standard@37` (2026-09-26, from 19:51 UTC)
+
+### 20.1 STEP 0 — the environment and what run 5 left
+
+- The operator variables were present (presence checks only); `EMBEDDING_PROVIDER_*` were not (vector retrieval stays
+  BLOCKED). `db:migrate` applied nothing; `corpus:verify --database` returned `complete: true` (3 books, 1,138 spine
+  chapters, 1,000 main, 656 Korean main).
+- The bridge probe at 20:01 UTC failed on every class (R `retryable_throttled`, P/M/C `retryable_provider`) and
+  `bridge:credits` flagged all six workspaces `rate-limited`: ws1 32.63 %, ws2 12.22 %, ws3 74.43 %, ws4 28.94 %,
+  ws5 45.93 % (6 h window at 101.75), ws6 35.14 %.
+- Run 5's sandbox was still driving G23r (`producing`, chapter 4 revising, runner `cli:3918750`, lease renewed at
+  20:02:55 UTC). G24a had failed at 19:59:20 UTC on chapter 3's evaluation with the bridge's HTTP 401 (chapters 1–2
+  accepted). G24r stopped at 19:41:39 UTC with `APPROVAL_BLOCKED` on chapter 1 (0 blocking, 1 major; prose 80.2,
+  structure 82.5, genre 90, voice 78.2, all over their gates) after the run-5 extension.
+- The audit of run 5's code is ADR-0118: its code-level changes ran for every policy, one of them broke an earlier pin's
+  test, the variance figures of §19.2 measured padding, and the merged head failed CI.
+
+
+### 20.2 STEP 1.2 — reading variance, live
+
+Pending: independent live readings of frozen versions (the bridge was throttled at the start of the run).
