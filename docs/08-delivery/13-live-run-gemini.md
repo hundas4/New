@@ -1113,3 +1113,22 @@ The last scorecard of each baseline chapter at rest, open blocking and major fin
   length budget minus its share of the excess, and a kept patch may not lengthen an over-band chapter.
 - **G9-8** stays open: the stock figures the prose judge names are the ones `corpus:stock-phrases` measures (STEP 4.5).
 
+### 20.4 Accepted chapters in run 6
+
+| | G24a chapter 3 (`standard@35`, sha256:296d5cff…) |
+| --- | --- |
+| Accepted | 21:51 UTC. The chapter started in run 5 (19:44 UTC); run 6 resumed it at 20:41 from the audited worktree. |
+| Length | 5,550자, 4,339 without spaces |
+| Rounds | 4, within the policy cap (no grant). The corpus copy check stopped r0's v1 (a 14-자 overlap with the operator's own 163화), fixed in the next round. |
+| Sub-scores and gates | prose 90.9 / 78, structure 95.0 / 78, genre 80.0 / 72, voice 91.3 / 76 (all passing); overall 93; 0 blocking / 0 major / 36 minor |
+| corpus:likeness | 55 (first-person bands 60) |
+| Lint | TRN-KO-14 ×3 (note), drafts-trembled-faintly ×1 (minor) |
+| Calls / tokens / model time | 154 calls / 608,303 in, 44,454 out / 4,285 s (the chapter's calls in both runs, by activity id) |
+| Credits | not separable (the chapter spans runs 5 and 6); at this run's measured 0.09 points per recorded call, about 14 points |
+| Findings | `ops/live-runs/run6/findings/G24a-ch03.md` (45 blocking or major findings raised across its readings; none open at acceptance) |
+
+Excerpt (the first three lines of the accepted text, unedited):
+
+> 묵직한 돈주머니를 한 손으로 가볍게 위아래로 툭툭 던졌다.
+> 짤랑. 짤랑.
+> 금화가 부딪치는 맑은 쇳소리가 복도에 울렸다. 내 시선은 베르너의 당황한 얼굴을 똑바로 향하고 있었다.

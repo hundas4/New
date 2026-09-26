@@ -10,6 +10,7 @@
 | G23r 회귀 standard33 | 3 | `policy/standard@33` | 5,635 / 4,484 | 7 (after an operator grant of 5) | prose 85.6 / 78, structure 95.0 / 78, genre 85.0 / 72, voice 95.7 / 76; overall 90.0; blocking 0 / major 0 / minor 16 | 35 / 35 | 95 / 415,863, 25,754 / 3270 s | [accepted/G23r/ch03.md](accepted/G23r/ch03.md) |
 | G24a 아카데미 standard35 | 1 | `policy/standard@35` | 5,974 / 4,681 | 8 (after an operator grant of 5) | prose 87.7 / 78, structure 85.5 / 78, genre 80.0 / 72, voice 84.4 / 76; overall 87.0; blocking 0 / major 0 / minor 40 | 65 / 70 | 229 / 938,471, 63,534 / 6885 s | [accepted/G24a/ch01.md](accepted/G24a/ch01.md) |
 | G24a 아카데미 standard35 | 2 | `policy/standard@35` | 6,118 / 4,794 | 3 (within the policy cap) | prose 92.5 / 78, structure 95.5 / 78, genre 85.0 / 72, voice 80.5 / 76; overall 94.0; blocking 0 / major 0 / minor 38 | 60 / 65 | 120 / 526,662, 35,639 / 3588 s | [accepted/G24a/ch02.md](accepted/G24a/ch02.md) |
+| G24a 아카데미 standard35 | 3 | `policy/standard@35` | 5,550 / 4,339 | 4 (within the policy cap) | prose 90.9 / 78, structure 95.0 / 78, genre 80.0 / 72, voice 91.3 / 76; overall 93.0; blocking 0 / major 0 / minor 36 | 55 / 60 | 154 / 608,303, 44,454 / 4285 s | [accepted/G24a/ch03.md](accepted/G24a/ch03.md) |
 
 ## Approved or best versions that were not accepted
 
