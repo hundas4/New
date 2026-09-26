@@ -474,7 +474,7 @@ export async function measureStoredTriples(
           Object.entries(r.rubricSpreadMax)
             .map(([k, v]) => `${k} ${String(v)}`)
             .join(', ') || '—'
-        } |`,
+        } | ${r.straddles === undefined ? '—' : `${String(r.straddles)} / ${String(r.medianBelow ?? 0)}`} |`,
     ),
   ];
   return { rows: out, markdown: lines.join('\n') };
