@@ -1051,6 +1051,45 @@ the contract with the fewest serious findings.
   test, the variance figures of §19.2 measured padding, and the merged head failed CI.
 
 
-### 20.2 STEP 1.2 — reading variance, live
+### 20.2 STEP 1.2 — reading variance, from the readings that were stored
 
-Pending: independent live readings of frozen versions (the bridge was throttled at the start of the run).
+`quality:readings <project>… --triples --policy=policy/standard@35` (21:20 UTC): every evaluation under a consensus policy
+stores three independent readings of one unchanged text per evaluator (`…`, `…:c2`, `…:c3`, ADR-0115). These are the
+complete triples of G24a and G24r (`standard@35`) and the first of G25a / G25r (`standard@37`). Nothing is sampled or
+padded. The gate column compares each reading's rubric score, `(mean − 1) × 25`, with the dimension's gate. The gated
+score also carries the deterministic composite, so this column is an upper bound on how often a single reading could
+flip the gate.
+
+| Evaluator | Triples | Findings per reading | Distinct findings | Seen in one reading of three | Heavy in one reading only | Heavy in two or more | Judge-score spread (median / max) | Largest rubric spread | Rubric on both sides of the gate / median below it |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| continuity | 27 | 1.9 | 111 | 84 (75.7 %) | 56 | 26 | — / — | — | — |
+| contract_check | 24 | 1.9 | 128 | 118 (92.2 %) | 74 | 8 | — / — | — | — |
+| genre_judge | 25 | 2.5 | 162 | 140 (86.4 %) | 40 | 9 | 10 / 20 | reader_fantasy 2, taboo_restraint 2, device_correctness 2, vocabulary_register 2 | 10 / 3 |
+| knowledge_leak | 22 | 0.3 | 15 | 13 (86.7 %) | 8 | 2 | — / — | — | — |
+| promise_check | 12 | 0.4 | 9 | 6 (66.7 %) | 2 | 1 | — / — | — | — |
+| prose_judge | 25 | 4.6 | 240 | 167 (69.6 %) | 24 | 18 | 6 / 13 | readability 1, idiomatic_korean 1, register_fidelity 2, translation_markers 2 | 14 / 8 |
+| repetition_judge | 26 | 2.1 | 107 | 68 (63.6 %) | 30 | 11 | — / — | — | — |
+| structure_judge | 23 | 2.2 | 110 | 80 (72.7 %) | 20 | 9 | 7 / 27 | ending_pull 2, hook_timing 3, local_payoff 1, exposition_control 3, dialogue_forwardness 2 | 12 / 10 |
+| voice_judge | 27 | 2.6 | 170 | 138 (81.2 %) | 37 | 13 | 10 / 20 | verbal_habits 2, distinguishability 1, register_consistency 2, register_naturalness 1 | 13 / 17 |
+
+**What it shows.**
+- One reading is a weak witness. For every evaluator, most distinct findings appear in only one of three readings: 64 %
+  for the repetition judge up to 92 % for the contract checker (structure 73 %).
+- The 2-of-3 quorum does real work. It drops 20 structure majors that a single reading raised and keeps 9. For the
+  continuity checker it drops 56 and keeps 26; for the contract checker 74 and 8.
+- Scores are noisy too. Structure-judge scores of one text spread by a median of 7 points and up to 27, with `hook_timing`
+  and `exposition_control` up to 3 rubric points apart. In 12 of 23 structure triples one reading's rubric sits on each
+  side of the gate.
+
+**Does structure noise block acceptances?** Measurably, no. Across the 78 scorecards G23r, G24a and G24r stored:
+
+| | Scorecards |
+| --- | --- |
+| Structure below its gate | 5 |
+| Structure the only dimension below its gate | 4 |
+| Voice / prose / genre below their gates | 7 / 6 / 2 |
+| An open blocking or major finding | 56 |
+
+The medians and the composite keep gate failures rare; what stops chapters is findings. **No policy change** for the
+structure judge (rule 7). The finding-level noise is what the consensus protocol already filters. The findings that do
+stand are the defects STEP 1.3 works on.
