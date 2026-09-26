@@ -441,6 +441,34 @@ export async function runDb(argv: readonly string[]): Promise<AsyncCommandResult
         });
         return { ok: true, output: { workspace_id: ws, ...p } };
       }
+      case 'project:archive': {
+        // Run 6, STEP 7.5: an archived project keeps every row; only its status and a settings note change.
+        const [projectId, ...flags] = rest;
+        if (!projectId) return { ok: false, output: USAGE };
+        const reason =
+          flags.find((f) => f.startsWith('--reason='))?.slice('--reason='.length) ?? '';
+        const active = await pool.query<{ status: string }>(
+          "SELECT status FROM novel_runs WHERE project_id = $1 AND status IN ('suggesting', 'planning', 'producing')",
+          [projectId],
+        );
+        if (active.rows.length)
+          return {
+            ok: false,
+            output: {
+              error: 'PROJECT_ACTIVE',
+              detail: `its run is ${active.rows[0]?.status ?? ''}`,
+            },
+          };
+        const updated = await pool.query<{ id: string; status: string }>(
+          `UPDATE projects SET status = 'archived',
+                  settings = settings || jsonb_build_object('archived', jsonb_build_object('at', now(), 'reason', $2::text)),
+                  updated_at = now()
+            WHERE id = $1 RETURNING id, status`,
+          [projectId, reason],
+        );
+        if (!updated.rows[0]) return { ok: false, output: { error: 'PROJECT_NOT_FOUND' } };
+        return { ok: true, output: updated.rows[0] };
+      }
       case 'series:audit': {
         // ADR-0061: deterministic whole-serial audit (overdue promises, absent characters, story-time
         // regressions, repeated openings). Reads accepted canon only and blocks nothing.
@@ -1730,6 +1758,7 @@ export const DB_COMMANDS = new Set([
   'quality:fix-rates',
   'quality:findings',
   'quality:readings',
+  'project:archive',
   'quality:lint-ko',
   'pack:inspect',
   'story:state',
