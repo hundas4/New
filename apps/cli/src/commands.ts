@@ -503,7 +503,18 @@ export async function runDb(argv: readonly string[]): Promise<AsyncCommandResult
         if (versionIds.length === 0) return { ok: false, output: USAGE };
         // Run 6, STEP 1.2: `--triples` reads the ids as projects and measures the consensus readings they stored.
         if (rest.includes('--triples')) {
-          const triples = await measureStoredTriples(pool, versionIds);
+          const gatePolicy = loadPolicies().get(
+            (rest.find((a) => a.startsWith('--policy='))?.slice('--policy='.length) ??
+              'policy/standard@37') as PolicyRef,
+          );
+          const gateOf = (d: 'prose' | 'structure' | 'genre' | 'voice') =>
+            gatePolicy?.gates.dimensions[d]?.min_score;
+          const triples = await measureStoredTriples(pool, versionIds, {
+            prose: gateOf('prose'),
+            structure: gateOf('structure'),
+            genre: gateOf('genre'),
+            voice: gateOf('voice'),
+          });
           return { ok: true, output: rest.includes('--json') ? triples.rows : triples.markdown };
         }
         const report = await measureVersionVariance(pool, versionIds);

@@ -7,6 +7,7 @@
 import type { Pool } from '@yeonjae/db';
 import type { Generated } from '@yeonjae/domain';
 import { clusterReadings } from './consensus.js';
+import { rubricScore } from './evaluation-plan.js';
 
 type Issue = Generated.IssueSchema.Issue;
 
@@ -352,6 +353,29 @@ export interface EvaluatorVarianceRow {
   readonly scoreSpreadMedian: number | undefined;
   readonly scoreSpreadMax: number | undefined;
   readonly rubricSpreadMax: Readonly<Record<string, number>>;
+  /** Judges only: triples whose readings' rubric scores lie on both sides of the gate, and whose median is below it. */
+  readonly straddles?: number | undefined;
+  readonly medianBelow?: number | undefined;
+}
+
+const JUDGE_DIMENSION: Readonly<Record<string, 'prose' | 'structure' | 'genre' | 'voice'>> = {
+  prose_judge: 'prose',
+  structure_judge: 'structure',
+  genre_judge: 'genre',
+  voice_judge: 'voice',
+};
+
+/** Where a judge's rubric scores of one text sit against its dimension's gate. */
+export function gateSides(
+  rubrics: readonly Readonly<Record<string, number>>[],
+  dimension: 'prose' | 'structure' | 'genre' | 'voice',
+  gate: number,
+): { straddles: boolean; medianBelow: boolean } {
+  const s = rubrics.map((r) => rubricScore(dimension, r)).sort((a, b) => a - b);
+  const lo = s[0] ?? 0;
+  const hi = s[s.length - 1] ?? 0;
+  const mid = s[Math.floor((s.length - 1) / 2)] ?? 0;
+  return { straddles: lo < gate && hi >= gate, medianBelow: mid < gate };
 }
 
 /**
@@ -361,6 +385,9 @@ export interface EvaluatorVarianceRow {
 export async function measureStoredTriples(
   pool: Pool,
   projectIds: readonly string[],
+  gates: Readonly<
+    Partial<Record<'prose' | 'structure' | 'genre' | 'voice', number | undefined>>
+  > = {},
 ): Promise<{ rows: EvaluatorVarianceRow[]; markdown: string }> {
   const { rows } = await pool.query<{ project_id: string; activity_id: string; payload: unknown }>(
     `SELECT c.project_id, c.activity_id, a.payload
@@ -383,11 +410,26 @@ export async function measureStoredTriples(
     groups.set(key, g);
   }
   const byEvaluator = new Map<string, TripleVariance[]>();
+  const sides = new Map<string, { straddles: number; medianBelow: number }>();
   for (const g of groups.values()) {
     if (g.readings.size !== 3) continue;
     const list = byEvaluator.get(g.evaluator) ?? [];
     list.push(tripleVariance([...g.readings.values()]));
     byEvaluator.set(g.evaluator, list);
+    const dimension = JUDGE_DIMENSION[g.evaluator];
+    const gate = dimension ? gates[dimension] : undefined;
+    if (dimension && gate !== undefined) {
+      const side = gateSides(
+        [...g.readings.values()].map((r) => r.rubric),
+        dimension,
+        gate,
+      );
+      const acc = sides.get(g.evaluator) ?? { straddles: 0, medianBelow: 0 };
+      sides.set(g.evaluator, {
+        straddles: acc.straddles + (side.straddles ? 1 : 0),
+        medianBelow: acc.medianBelow + (side.medianBelow ? 1 : 0),
+      });
+    }
   }
   const median = (xs: number[]): number | undefined => {
     const s = [...xs].sort((a, b) => a - b);
@@ -420,11 +462,12 @@ export async function measureStoredTriples(
         scoreSpreadMedian: median(spreads),
         scoreSpreadMax: spreads.length ? Math.max(...spreads) : undefined,
         rubricSpreadMax,
+        ...(sides.has(evaluator) ? sides.get(evaluator) : {}),
       };
     });
   const lines = [
-    '| Evaluator | Triples | Findings per reading | Distinct findings | Seen in one reading of three | Heavy in one reading only | Heavy in two or more | Judge-score spread (median / max) | Largest rubric spread |',
-    '| --- | --- | --- | --- | --- | --- | --- | --- | --- |',
+    '| Evaluator | Triples | Findings per reading | Distinct findings | Seen in one reading of three | Heavy in one reading only | Heavy in two or more | Judge-score spread (median / max) | Largest rubric spread | Rubric on both sides of the gate / median below it |',
+    '| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |',
     ...out.map(
       (r) =>
         `| ${r.evaluator} | ${String(r.triples)} | ${String(r.findingsPerReading)} | ${String(r.distinct)} | ${String(r.seenInOne)} (${r.distinct ? ((r.seenInOne / r.distinct) * 100).toFixed(1) : '0'} %) | ${String(r.heavySingle)} | ${String(r.heavyQuorum)} | ${r.scoreSpreadMedian ?? '—'} / ${r.scoreSpreadMax ?? '—'} | ${

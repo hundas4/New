@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import type { Generated } from '@yeonjae/domain';
 import {
   analyzeReadingVariance,
+  gateSides,
   readingBase,
   sameRawFinding,
   tripleVariance,
@@ -110,5 +111,27 @@ describe('stored consensus readings (run 6, STEP 1.2)', () => {
     ).toBe(false);
     expect(readingBase('structure_judge:2:r1:full:c3')).toBe('structure_judge:2:r1:full');
     expect(readingBase('structure_judge:2:r1')).toBe('structure_judge:2:r1');
+  });
+});
+
+describe('a judge against its gate (run 6, STEP 1.2)', () => {
+  it('finds readings of one text on both sides of the gate', () => {
+    const all = (v: number) => ({
+      hook_timing: v,
+      dialogue_forwardness: v,
+      local_payoff: v,
+      ending_pull: v,
+      exposition_control: v,
+    });
+    // Rubric scores 75, 100 and 50 (mean − 1) × 25 against a gate of 78.
+    expect(gateSides([all(4), all(5), all(3)], 'structure', 78)).toEqual({
+      straddles: true,
+      medianBelow: true,
+    });
+    expect(gateSides([all(5), all(5), all(4)], 'structure', 78)).toEqual({
+      straddles: true,
+      medianBelow: false,
+    });
+    expect(gateSides([all(5), all(5)], 'structure', 78).straddles).toBe(false);
   });
 });
