@@ -17,5 +17,7 @@ commits = [
 ]
 paths = [
   '''pnpm-lock\.yaml''',
+  # A blind packet's answer key is base64 of item labels (reviewed: no secret); it only looks random.
+  '''ops/live-runs/[^/]+/blind/answer-key\.b64\.txt''',
   '''packages/domain/src/generated/.*''',
 ]
