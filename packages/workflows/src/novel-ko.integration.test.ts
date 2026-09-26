@@ -4172,3 +4172,110 @@ for (const [label, policyVersion, knobs] of [
       );
     },
   );
+
+run(
+  'Korean novel run under standard.v37: a rejected arc plan is asked again on resume (ADR-0119)',
+  () => {
+    let pool: Pool;
+    let workspaceId: string;
+    let projectId: string;
+    const seen: ProviderRequest[] = [];
+    // G25-1: the first arc plan starts its story time window at ordinal -1; the schema's minimum is 0.
+    const negativeWindow = (req: ProviderRequest, out: ReturnType<typeof script>) => {
+      if (req.trace?.role !== 'arc_planner' || req.trace.activityId.includes(':regeneration'))
+        return out;
+      if (!out || !('json' in out)) return out;
+      return {
+        json: {
+          ...(out.json as object),
+          story_time_window: {
+            start: { chapter_no: 1, ordinal: -1, precision: 'exact' },
+            end: { chapter_no: 2, ordinal: 1, precision: 'exact' },
+          },
+        },
+      };
+    };
+    const marker = '그는 손을 번쩍 들어 당장이라도 내 멱살을 잡을 듯 씩씩거렸다.';
+    const withMarker = (req: ProviderRequest, out: ReturnType<typeof script>) => {
+      if (req.trace?.role !== 'scene_writer' || !out || !('json' in out)) return out;
+      const text = (out.json as { text?: string }).text ?? '';
+      return { text: [marker, text].join('\n\n').replace(/([.!?])[ \t]+(?=\S)/g, '$1\n\n') };
+    };
+    const provider = new MockProvider((req) => {
+      seen.push(req);
+      return negativeWindow(req, withMarker(req, batchedScript(req, script(req))));
+    });
+    const intake = { ...INTAKE, pov: 'first', protagonist_type: '먼치킨' };
+
+    beforeAll(async () => {
+      pool = await freshDatabase();
+      workspaceId = await createWorkspace(pool, 'novel-ko-v37-arc-retry');
+      ({ projectId } = await createProject(pool, {
+        workspaceId,
+        title: '재의 장부',
+        operatingMode: 'autopilot',
+        policyVersion: 'policy/standard@37',
+      }));
+    }, 120_000);
+
+    afterAll(async () => {
+      await pool.end();
+    });
+
+    const makeDeps = () => ({
+      pool,
+      gateway: new Gateway({
+        providers: new Map([['mock', provider]]),
+        routing,
+        budget: new MemoryBudget(10_000_000),
+        audit: new PgAuditStore(
+          pool,
+          { workspaceId, projectId },
+          new ArtifactLlmOutputStore(pool, { workspaceId, projectId }),
+        ),
+      }),
+    });
+
+    it('fails on the rejected arc plan, then asks the planner again on resume and accepts chapter 1', async () => {
+      const started = await startNovel(makeDeps(), { projectId, intake });
+      await approveConcept(pool, {
+        projectId,
+        conceptId: started.concepts[0]?.id ?? '',
+        autoContinue: true,
+        stopAfterChapter: 1,
+      });
+      const runner = new NovelRunner({
+        pool,
+        makeDeps,
+        runnerId: 'ko-v37-arc-retry-runner',
+        leaseSeconds: 30,
+      });
+      const drive = async () => {
+        while (await runner.tick()) {
+          const r = await getNovelRun(pool, projectId);
+          if (r?.status === 'needs_attention' || r?.status === 'failed') break;
+        }
+      };
+      await drive();
+      const failed = await getNovelRun(pool, projectId);
+      expect(failed?.status).toBe('failed');
+      const error = failed?.last_error as { code?: string; recommended_actions?: string[] } | null;
+      expect(error?.code).toBe('ARC_PLAN_INVALID');
+      expect(error?.recommended_actions).toContain('retry_step');
+
+      await resumeNovelRun(pool, { projectId });
+      await drive();
+      expect((await getNovelRun(pool, projectId))?.last_error ?? null).toBeNull();
+      const planners = seen
+        .filter((r) => r.trace?.role === 'arc_planner')
+        .map((r) => r.trace?.activityId ?? '');
+      expect(planners).toHaveLength(2);
+      expect(planners[1]).toBe(`${planners[0] ?? ''}:regeneration:1`);
+      const chapter = await pool.query<{ status: string }>(
+        'SELECT status FROM chapters WHERE project_id = $1 AND number = 1',
+        [projectId],
+      );
+      expect(chapter.rows[0]?.status).toBe('accepted');
+    }, 300_000);
+  },
+);
