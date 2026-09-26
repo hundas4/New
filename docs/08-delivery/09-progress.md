@@ -38,6 +38,56 @@ standard37 and G25a 아카데미 standard37 (the exit-condition projects, same i
 and reports touch the permanent `DATABASE_URL`, from live worktrees; a live worktree is rebuilt after every checkout and
 never checked out while its project runs; no full `pnpm check` while a live run is in flight.
 
+## Run 6: G25-1, a rejected arc plan asks again — 2026-09-26
+
+**Built (ADR-0119, no policy version):** the arc plan's rejection is recorded (`planning_rejection`) and the next attempt
+asks again as `arc_plan:<arc>:regeneration:<n>`; the error carries `retry_step`, so auto-resume tries it. Traceability row
+`G25FIX-001`.
+
+**Measured:** G25r's first arc plan (`standard@37`) started its time window at ordinal −1 (`ARC_PLAN_INVALID`, 20:54 UTC).
+Live after the change: the runner auto-resumed it (`ARC_PLAN_INVALID: resume 1 of 6`, 21:08 UTC) and asked again; that call
+then met the bridge's HTTP 502.
+
+**Tests:** `novel-ko.integration.test.ts` (a `standard@37` run fails on the rejected plan, asks again on resume, accepts
+chapter 1), `auto-resume.test.ts`.
+
+## Run 6: STEP 1.2 and 1.3 — reading variance from stored readings, what the baselines stopped on — 2026-09-26
+
+**Built:** `quality:readings <project>… --triples [--policy=]` (`measureStoredTriples`, `tripleVariance`, `gateSides`):
+the three readings each consensus evaluation stored, per evaluator, with no sampling or padding.
+
+**Measured** (`13-live-run-gemini.md` §20.2–§20.3): in G24a / G24r / G25 triples, 64–92 % of distinct findings appear in
+one reading of three (structure 73 %). The quorum drops 20 structure majors and keeps 9. Structure scores of one text
+spread by a median of 7 and up to 27 points. But across 78 stored scorecards, structure alone failed its gate in 4, and
+56 had an open blocking or major finding. So structure noise does not block acceptances: **no policy change**. The
+baselines stopped on a real canon slip and stock personifications (G23r 4, G9-8) and on length growth in revision
+(G24r 1, new defect G24-2, design recorded).
+
+**Tests:** `readings-variance.test.ts`.
+
+## Run 6: STEP 2 — the operator reading packet — 2026-09-26
+
+**Built:** `packet:reading --out= --projects= [--near=<version>=<reason>]…` (`apps/cli/src/packet.ts`): every accepted
+chapter with its metrics row (length with and without spaces, rounds and grants, sub-scores against gates, likeness,
+lint, calls / tokens / model time by activity id, policy hash), plus labelled near misses.
+
+**Produced:** `ops/live-runs/run6/`, containing:
+- six accepted chapters (G17a 1, G23r 1–3, G24a 1–2);
+- G22a v10 and G21r v8, each with what stopped it;
+- a blinded 12-item packet (six pipeline, six operator chapters matched by position and POV), with its answer key in a
+  separate file;
+- a README with the reading order.
+
+G25r / G25a had no accepted chapter yet.
+
+**Tests:** `packet.test.ts`.
+
+## Run 6: STEP 7.5 — the stray probe project archived — 2026-09-26
+
+**Built:** `project:archive <id> [--reason=]` (status `archived` and a settings note; every row kept; refused while its
+run is active). **Done:** "probe" (run 3's empty project: no chapters, no calls, no run) archived at 21:19 UTC.
+**Tests:** `project-archive.integration.test.ts`.
+
 ## Run 6: STEP 0 — setup and the run-5 audit — 2026-09-26
 
 **Done:** operator variables present (presence checks; `EMBEDDING_PROVIDER_*` absent, vectors stay BLOCKED); `pnpm
