@@ -130,6 +130,7 @@ import { ArtifactLlmOutputStore } from '@yeonjae/workflows';
 import { WorkflowError } from '@yeonjae/workflows';
 import { NOVEL_COMMANDS, NOVEL_USAGE, runNovelCommand } from './novel.js';
 import { CORPUS_COMMANDS, runCorpusCommand } from './corpus.js';
+import { PACKET_COMMANDS, runPacketCommand } from './packet.js';
 import { CHECKPOINT_COMMANDS, runCheckpointCommand } from './checkpoint.js';
 
 /** Chapter-1 fixture paths and identity pins (mirrors packages/workflows/src/testkit.ts, the test-only harness). */
@@ -1292,6 +1293,7 @@ export async function runDb(argv: readonly string[]): Promise<AsyncCommandResult
         if (NOVEL_COMMANDS.has(cmd ?? ''))
           return await runNovelCommand(pool, cmd ?? '', rest, USAGE);
         if (CORPUS_COMMANDS.has(cmd ?? '')) return await runCorpusCommand(pool, cmd ?? '', rest);
+        if (PACKET_COMMANDS.has(cmd ?? '')) return await runPacketCommand(pool, cmd ?? '', rest);
         if (CHECKPOINT_COMMANDS.has(cmd ?? ''))
           return await runCheckpointCommand(pool, cmd ?? '', rest);
         return { ok: false, output: USAGE };
@@ -1702,6 +1704,7 @@ async function projectForJob(pool: Pool, jobId: string): Promise<string | undefi
 export const DB_COMMANDS = new Set([
   ...NOVEL_COMMANDS,
   ...CORPUS_COMMANDS,
+  ...PACKET_COMMANDS,
   ...CHECKPOINT_COMMANDS,
   'db:migrate',
   'project:create',
