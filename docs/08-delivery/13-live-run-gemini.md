@@ -1093,3 +1093,23 @@ flip the gate.
 The medians and the composite keep gate failures rare; what stops chapters is findings. **No policy change** for the
 structure judge (rule 7). The finding-level noise is what the consensus protocol already filters. The findings that do
 stand are the defects STEP 1.3 works on.
+
+### 20.3 STEP 1.3 — what the baselines stopped on
+
+The last scorecard of each baseline chapter at rest, open blocking and major findings only:
+
+| Chapter | Finding | Defect |
+| --- | --- | --- |
+| G24r 1 (`standard@35`) | major, length: 7,024자 against 5,300 (+33 %) | G24-2 (below) |
+| G23r 4 (`standard@33`) | blocking, continuity: the hero "must still take the first 기연", which chapter 2's accepted canon already gave him (a real slip) | canon read, working as designed |
+| G23r 4 | major ×2, prose `literary_drift`: stock personifications (a door that "screams", muscles that "scream") | G9-8 |
+| G23r 4 | major, repetition: p4's aura-recoil passage written again at p192–194 | — |
+
+- **G24-2 — the chapter grows past its band in revision.** G24r's chapter 1 left drafting inside its band and ended at
+  +33 %. Its patches were kept because each resolved its targets, and each added text. Under `standard@35`, a length
+  finding reaches the `length_to_scene` rung only while `max_scene_rewrites` (2, starting value, `standard.v35`) allows. After that, the pre-run-5 patch
+  path sends the whole chapter as one patch. Under `standard@37` that round ends the loop instead (ADR-0118). Neither
+  shortens the chapter. **Best next design:** a patch round on a chapter over its band gives the reviser the span's
+  length budget minus its share of the excess, and a kept patch may not lengthen an over-band chapter.
+- **G9-8** stays open: the stock figures the prose judge names are the ones `corpus:stock-phrases` measures (STEP 4.5).
+
