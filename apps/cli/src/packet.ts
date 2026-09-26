@@ -61,19 +61,20 @@ function lint(round: RoundReport | undefined): string {
   return rules.length ? rules.join(', ') : 'none';
 }
 
+/** A chapter's model calls: the stored rows carry no job, so they are attributed by activity id (`<step>:<n>:…`). */
 async function callsFor(
   pool: Pool,
   projectId: string,
-  chapterId: string,
+  chapterNo: number,
 ): Promise<{ calls: number; input: number; output: number; seconds: number }> {
   const { rows } = await pool.query<{ calls: string; input: string; output: string; ms: string }>(
     `SELECT count(*)::text AS calls,
             coalesce(sum((c.usage->>'input')::bigint), 0)::text AS input,
             coalesce(sum((c.usage->>'output')::bigint), 0)::text AS output,
             coalesce(sum(c.latency_ms), 0)::text AS ms
-       FROM llm_calls c JOIN jobs j ON j.id = c.job_id
-      WHERE c.project_id = $1 AND j.target_id = $2`,
-    [projectId, chapterId],
+       FROM llm_calls c
+      WHERE c.project_id = $1 AND split_part(c.activity_id, ':', 2) = $2`,
+    [projectId, String(chapterNo)],
   );
   const r = rows[0];
   return {
@@ -122,10 +123,6 @@ async function packetCmd(pool: Pool, args: readonly string[]): Promise<Result> {
         WHERE r.project_id = $1 AND e.kind IN ('chapter.accepted', 'chapter.revision_extended') ORDER BY e.seq`,
       [projectId],
     );
-    const chapterIds = await pool.query<{ id: string; number: number }>(
-      'SELECT id, number FROM chapters WHERE project_id = $1',
-      [projectId],
-    );
     for (const ch of report.chapters) {
       if (!ch.accepted_version_id) continue;
       const v = await pool.query<{ text: string; version_no: number }>(
@@ -146,13 +143,11 @@ async function packetCmd(pool: Pool, args: readonly string[]): Promise<Result> {
       const len = lengthOf(text);
       const m = chapterMetrics(text, source);
       const likeness = `${String(operatorLikeness(m, bands.all).score)} / ${String(operatorLikeness(m, bands.first).score)}`;
-      const chapterId = chapterIds.rows.find((r) => r.number === ch.number)?.id ?? '';
-      const calls = chapterId ? await callsFor(pool, projectId, chapterId) : undefined;
-      const rounds = `${String(accepted?.payload.revision_rounds ?? '?')}${grants ? ` (after an operator grant of ${String(grants)})` : ' (within the policy cap)'}`;
+      const calls = await callsFor(pool, projectId, ch.number);
+      const acceptedRounds = accepted?.payload.revision_rounds;
+      const rounds = `${typeof acceptedRounds === 'number' ? String(acceptedRounds) : '?'}${grants ? ` (after an operator grant of ${String(grants)})` : ' (within the policy cap)'}`;
       const file = join('accepted', key, `ch${String(ch.number).padStart(2, '0')}.md`);
-      const callText = calls
-        ? `${String(calls.calls)} / ${calls.input.toLocaleString('en-US')}, ${calls.output.toLocaleString('en-US')} / ${String(calls.seconds)} s`
-        : '—';
+      const callText = `${String(calls.calls)} / ${calls.input.toLocaleString('en-US')}, ${calls.output.toLocaleString('en-US')} / ${String(calls.seconds)} s`;
       mkdirSync(join(out, 'accepted', key), { recursive: true });
       writeFileSync(
         join(out, file),
